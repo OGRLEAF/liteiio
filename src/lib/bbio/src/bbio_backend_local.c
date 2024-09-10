@@ -37,7 +37,7 @@ int io_ioctl_local(io_context *ctx, int __fd, unsigned long __request, void *pay
 
 void io_write_local(io_mapped_device *device, uint32_t addr, uint32_t value)
 {
-    if (addr < device->ch.start || addr > device->ch.end)
+    if ((((uint64_t)addr)) > (device->ch.end - device->ch.start))
     {
         return;
     }
@@ -47,7 +47,7 @@ void io_write_local(io_mapped_device *device, uint32_t addr, uint32_t value)
 
 uint32_t io_read_local(io_mapped_device *device, uint32_t addr)
 {
-    if (addr < device->ch.start || addr > device->ch.end)
+     if ((((uint64_t)addr)) > (device->ch.end - device->ch.start))
     {
         return -1;
     }
@@ -77,6 +77,7 @@ static local_buffer_d *io_local_buffer_init(int fd)
 
     local_buffer_d *local_buffer = (local_buffer_d *)malloc(sizeof(local_buffer_d));
     local_buffer->buffer_count = BUFFER_COUNT;
+    local_buffer->buffer_ctx = buffer_ctx;
     return local_buffer;
 }
 
@@ -84,11 +85,10 @@ static uint32_t io_write_stream_local(io_stream_device *device, void *data, uint
 {
     local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
     struct channel_buffer *current_buffer = local_buffer->buffer_ctx->channel_buffer + local_buffer->current_buffer_id;
-
     if (current_buffer->status == PROXY_QUEUED)
     {
         // wait for the last buffer finished, it means we are faster than dma
-        ioctl(device->device.ctx, device->fd, FINISH_XFER, &local_buffer->current_buffer_id);
+        ioctl(device->fd, FINISH_XFER, &local_buffer->current_buffer_id);
     }
 
     // TODO: zero copy support
@@ -97,7 +97,7 @@ static uint32_t io_write_stream_local(io_stream_device *device, void *data, uint
     memcpy(current_buffer->buffer, data, size);
 
     // start next transmition
-    ioctl(device->device.ctx, device->fd, START_XFER, &local_buffer->current_buffer_id);
+    ioctl(device->fd, START_XFER, &local_buffer->current_buffer_id);
 
     // rolling buffer
     local_buffer->current_buffer_id = (local_buffer->current_buffer_id + 1) % local_buffer->buffer_count;
@@ -133,7 +133,7 @@ io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
 {
     io_stream_device *device;
     int fd;
-    fd = open(ctx, file_path, O_RDWR);
+    fd = open(file_path, O_RDWR);
 
     if (fd < 1)
     {

@@ -84,94 +84,6 @@ int io_net_call_create(io_net_context *ctx, enum cmd_call_type type)
 #define GET_MACRO(_1, _2, _3, NAME, ...) NAME
 #define io_net_call_return(...) GET_MACRO(__VA_ARGS__, io_net_call_return_value, _, io_net_call_return_null)(__VA_ARGS__)
 
-// int io_net_call_return(io_net_context *ctx, size_t size, void *ret)
-// {
-//     int n;
-//     n = recv(ctx->sockfd, ret, size, 0);
-// }
-
-// IO_FD io_open_net(io_context *ctx, char *file, int flag)
-// {
-//     uint8_t file_path_len = strlen(file);
-//     IO_FD fd;
-//     io_net_context *ctx_net = (io_net_context *)ctx;
-
-//     io_net_call_start(ctx_net, CALL_OPEN);
-//     io_net_call_param(ctx_net, sizeof(file_path_len), &file_path_len);
-//     io_net_call_param(ctx_net, file_path_len, file);
-//     io_net_call_param(ctx_net, sizeof(flag), &flag);
-//     io_net_call_return(ctx_net, sizeof(fd), &fd);
-
-//     return fd;
-// }
-
-// // int io_close_local(io_context *ctx, IO_FD fd)
-// // {
-// //     return close(fd);
-// // }
-
-// void *io_mmap_net(io_context *ctx, void **addr, IO_FD fd, size_t __len)
-// {
-//     io_net_context *ctx_net = (io_net_context *)ctx;
-//     void *rptr = NULL;
-//     // void *local_mirror'
-//     printf("map net : fd=%d len=%ld\n", fd, __len);
-//     io_net_call_start(ctx_net, CALL_MMAP);
-//     io_net_call_param(ctx_net, sizeof(IO_FD), &fd);
-//     io_net_call_param(ctx_net, sizeof(__len), &__len);
-//     io_net_call_return(ctx_net, sizeof(rptr), &rptr);
-
-//     if (rptr)
-//     {
-//         *addr = rptr;
-//     }
-
-//     return rptr;
-// }
-
-// int io_ioctl_net(io_context *ctx, int __fd, unsigned long __request, void *payload)
-// {
-//     io_net_context *ctx_net = (io_net_context *)ctx;
-//     int ret;
-//     // void *local_mirror'
-//     io_net_call_start(ctx_net, CALL_IOCTL);
-//     io_net_call_param(ctx_net, sizeof(IO_FD), &__fd);
-//     io_net_call_param(ctx_net, sizeof(__request), &__request);
-//     io_net_call_param(ctx_net, sizeof(int), payload);
-//     io_net_call_return(ctx_net, sizeof(ret), &ret);
-//     return ret;
-// }
-
-// uint16_t io_write_busrt_net(io_context *ctx, void *addr, void *data, uint32_t size)
-// {
-//     io_net_context *ctx_net = (io_net_context *)ctx;
-//     int flag_on = 1, flag_off = 0;
-//     struct iovec iov[4];
-//     io_net_call_startv(ctx_net, iov[0], CALL_WRITE_BURST);
-//     io_net_call_paramv(ctx_net, iov[1], sizeof(addr), &addr);
-//     io_net_call_paramv(ctx_net, iov[2], sizeof(size), &size);
-//     io_net_call_paramv(ctx_net, iov[3], size, data);
-//     setsockopt(ctx_net->sockfd, IPPROTO_TCP, TCP_CORK, &flag_on, sizeof(flag_on));
-//     writev(ctx_net->sockfd, iov, 4);
-//     setsockopt(ctx_net->sockfd, IPPROTO_TCP, TCP_CORK, &flag_off, sizeof(flag_off));
-//     io_net_call_return(ctx_net, sizeof(size), &size);
-//     return size;
-// }
-
-// uint16_t io_read_busrt_net(io_context *ctx, void *addr, void *data, uint32_t size)
-// {
-//     io_net_context *ctx_net = (io_net_context *)ctx;
-//     io_net_call_start(ctx_net, CALL_WRITE_BURST);
-//     io_net_call_param(ctx_net, sizeof(addr), &addr);
-//     io_net_call_param(ctx_net, sizeof(size), &size);
-//     io_net_call_return(ctx_net, size, data);
-//     return size;
-// }
-
-void io_sync_buffer_local(io_context *ctx, uint32_t *addr, void *data, int16_t size, uint8_t dir)
-{
-    io_write_busrt_net(ctx, addr, data, size);
-}
 
 void io_write_net(io_mapped_device *device, uint32_t addr, uint32_t value)
 {
@@ -193,7 +105,7 @@ uint32_t io_read_net(io_mapped_device *device, uint32_t addr)
 }
 
 
-static uint16_t io_write_stream_net(io_stream_device *device, void *data, uint32_t size)
+static uint32_t io_write_stream_net(io_stream_device *device, void *data, uint32_t size)
 {
     int flag_on = 1, flag_off = 0;
     struct iovec iov[4];
@@ -267,7 +179,7 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path, size_t si
     // handshake
 
 
-    device = (io_mapped_device *)malloc(sizeof(io_mapped_device));
+    device = (io_stream_device *) malloc(sizeof(io_stream_device));
     device->fd = sockfd;
 
     device->ch.write_stream = io_write_stream_net;
