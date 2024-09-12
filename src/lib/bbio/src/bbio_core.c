@@ -26,6 +26,7 @@ io_context *io_create_context()
     return ctx;
 };
 
+
 io_device *io_add_mapped_device(io_context *ctx, char *path)
 {
     io_mapped_device *device = ctx->backend.open_mapped(ctx, path, 512);
@@ -59,6 +60,11 @@ uint32_t io_read_mapped_device(io_mapped_device *device, uint32_t addr)
 {
     // return device->mapped_regs[addr];
     return device->ch.read(device, addr);
+}
+
+struct channel_buffer *io_stream_get_buffer(io_stream_device *device)
+{
+    return device->ch.alloc_buffer(device, 0);
 }
 
 void io_write_stream_device(io_stream_device *device, void *data, uint32_t size)
