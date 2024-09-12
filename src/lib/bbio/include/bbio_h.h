@@ -26,7 +26,7 @@ typedef uint32_t (*io_read_call)(io_mapped_device *device, uint32_t addr);
 
 typedef uint32_t (*io_write_stream)(io_stream_device *device, void *data, uint32_t size);
 typedef uint32_t (*io_read_stream)(io_stream_device *device, void *data, uint32_t size);
-
+typedef struct channel_buffer * (*io_stream_alloc_buffer)(io_stream_device *device, uint32_t flag);
 enum IO_DEVICE_TYPE
 {
     MAPPED_DEVICE = 0,
@@ -45,6 +45,7 @@ struct _bbio_device_stream_channel
 {
     io_write_stream write_stream;
     io_read_stream read_stream;
+    io_stream_alloc_buffer alloc_buffer;
     void *private;
 };
 
@@ -117,6 +118,8 @@ io_device *io_add_stream_device(io_context *ctx, char *path);
 
 uint32_t io_read_mapped_device(io_mapped_device *device, uint32_t addr);
 void io_write_mapped_device(io_mapped_device *device, uint32_t addr, uint32_t value);
+
+struct channel_buffer *io_stream_get_buffer(io_stream_device *device);
 void io_write_stream_device(io_stream_device *device, void *data, uint32_t size);
 
 #endif

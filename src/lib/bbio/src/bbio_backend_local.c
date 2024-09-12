@@ -47,7 +47,7 @@ void io_write_local(io_mapped_device *device, uint32_t addr, uint32_t value)
 
 uint32_t io_read_local(io_mapped_device *device, uint32_t addr)
 {
-     if ((((uint64_t)addr)) > (device->ch.end - device->ch.start))
+    if ((((uint64_t)addr)) > (device->ch.end - device->ch.start))
     {
         return -1;
     }
@@ -85,22 +85,47 @@ static uint32_t io_write_stream_local(io_stream_device *device, void *data, uint
 {
     local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
     struct channel_buffer *current_buffer = local_buffer->buffer_ctx->channel_buffer + local_buffer->current_buffer_id;
+    printf("Buffer %d status:%d -> ", local_buffer->current_buffer_id, current_buffer->status);
     if (current_buffer->status == PROXY_QUEUED)
     {
         // wait for the last buffer finished, it means we are faster than dma
         ioctl(device->fd, FINISH_XFER, &local_buffer->current_buffer_id);
     }
 
-    // TODO: zero copy support
-    // copy buffer
+    printf("%d\r", current_buffer->status);
+
     current_buffer->length = size;
-    memcpy(current_buffer->buffer, data, size);
+    // zero copy support
+    if (((void *)current_buffer) == data)
+    {
+    }
+    else
+        memcpy(current_buffer->buffer, data, size);
 
     // start next transmition
     ioctl(device->fd, START_XFER, &local_buffer->current_buffer_id);
 
     // rolling buffer
     local_buffer->current_buffer_id = (local_buffer->current_buffer_id + 1) % local_buffer->buffer_count;
+}
+
+struct channel_buffer *io_stream_zc_buffer_local(io_stream_device *device, uint32_t flag)
+{
+    // get next buffer
+    local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
+    struct channel_buffer *current_buffer = local_buffer->buffer_ctx->channel_buffer + local_buffer->current_buffer_id;
+    // printf("Buffer %d status:%d -> ", local_buffer->current_buffer_id, current_buffer->status);
+    // if (current_buffer->status == PROXY_QUEUED)
+    //     // wait for the last buffer finished, it means we are faster than dma
+    //     ioctl(device->fd, FINISH_XFER, &local_buffer->current_buffer_id);
+    // // may 3s timeout
+    // // check buffer status
+    // if(current_buffer->status == PROXY_TIMEOUT) {
+    //     // try clear error
+    // }
+    // printf("%d\n", current_buffer->status);
+
+    return current_buffer;
 }
 
 io_mapped_device *io_open_mapped_local(io_context *ctx, char *file_path, size_t size)
@@ -146,7 +171,7 @@ io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
     device->fd = fd;
     device->ch.private = io_local_buffer_init(fd);
     device->ch.write_stream = io_write_stream_local;
-
+    device->ch.alloc_buffer = io_stream_zc_buffer_local;
     if (device->ch.private == NULL)
     {
         free(device);
