@@ -116,13 +116,15 @@ static struct channel_buffer *io_stream_alloc_buffer_net(io_stream_device *devic
 static uint32_t io_write_stream_net(io_stream_device *device, void *data, uint32_t size)
 {
     int flag_on = 1, flag_off = 0;
-    // struct iovec iov[3];
+    struct iovec iov[3];
     // io_net_call_startv(device, iov[0], CALL_WRITE_STREAM);
     // io_net_call_paramv(device, iov[1], sizeof(size), &size);
     // io_net_call_paramv(device, iov[2], size, data);
-
     // writev(device->fd, iov, 3);
+    io_net_call_start(device, CALL_WRITE_STREAM);
+    io_net_call_param(device, sizeof(size), &size);
     io_net_call_param(device, size, data);
+    // io_net_call_param(device, size, data);
     // io_net_call_return(device, sizeof(size), &size);
     return size;
 }
@@ -151,7 +153,7 @@ static IO_FD io_open_remote_device(int sockfd, char *dev_path, size_t size)
     int n;
     // open device
     path_len = strlen(dev_path);
-    printf("open remote %d %s %d\n", path_len, dev_path, size);
+    printf("open remote %d %s %ld\n", path_len, dev_path, size);
     send(sockfd, &path_len, sizeof(path_len), 0);
     send(sockfd, dev_path, path_len, 0);
     send(sockfd, &size, sizeof(size), 0);
