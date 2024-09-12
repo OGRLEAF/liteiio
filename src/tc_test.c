@@ -33,19 +33,22 @@ int main(int argc, char **argv)
 
     io_stream_device *dma_dev = (io_stream_device *)io_add_stream_device(ctx, "/dev/dma_proxy_tx");
 
-    struct channel_buffer *buffer_test = (struct channel_buffer *)malloc(sizeof(struct channel_buffer));
-
-    int test_size = MAX_SAMPLES;
-    for (i = 0; i < test_size; i++)
+    int test_times = 64, j = 0;
+    for (int j = 0; ; j++)
     {
-        buffer_test->buffer[i].I0 = i;
-        buffer_test->buffer[i].Q0 = i;
+        struct channel_buffer *buffer_test = io_stream_get_buffer(dma_dev);
+
+        int test_size = MAX_SAMPLES;
+        for (i = 0; i < test_size; i++)
+        {
+            buffer_test->buffer[i].I0 = i + j * test_size;
+            buffer_test->buffer[i].Q0 = i + j * test_size;
+        }
+
+        // printf("Sync buffer samples=%d buffer=%p\n", test_size, buffer_test);
+
+        io_write_stream_device(dma_dev, buffer_test, test_size * sizeof(iq_buffer));
     }
-
-    printf("Sync buffer samples=%d\n", test_size);
-
-    io_write_stream_device(dma_dev, buffer_test, test_size * sizeof(iq_buffer));
-    io_write_stream_device(dma_dev, buffer_test, test_size * sizeof(iq_buffer));
 
     return 0;
 }
