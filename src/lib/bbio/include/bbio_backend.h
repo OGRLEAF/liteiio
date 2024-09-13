@@ -8,6 +8,8 @@
 // private api level proxy
 io_mapped_device *io_open_mapped_local(io_context *ctx, char *file_path, size_t size);
 io_stream_device *io_open_stream_local(io_context *ctx, char *file_path);
+int io_close_mapped_local(io_context *ctx, io_mapped_device *device);
+int io_close_stream_local(io_context *ctx, io_stream_device *device);
 
 // Proxy system call
 IO_FD io_open_local(io_context *ctx, char *file, int flag);

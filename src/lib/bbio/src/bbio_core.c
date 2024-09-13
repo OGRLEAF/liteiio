@@ -14,6 +14,8 @@ io_context *io_create_context()
     ctx->devices[0] = NULL;
     ctx->backend.open_mapped = io_open_mapped_local;
     ctx->backend.open_stream = io_open_stream_local;
+    ctx->backend.close_mapped = io_close_mapped_local;
+    ctx->backend.close_stream = io_close_stream_local;
     // ctx->backend.open = io_open_local;
     // ctx->backend.close = io_close_local;
     // ctx->backend.mmap = io_mmap_local;
@@ -26,10 +28,32 @@ io_context *io_create_context()
     return ctx;
 };
 
+void io_close_context(io_context *ctx)
+{
+    io_device **start_device = ctx->devices;
+    while ((*start_device) != NULL)
+    {
+        switch ((*start_device)->type)
+        {
+        case STREAM_DEVICE:
+            ctx->backend.close_stream(ctx, (io_stream_device *)*start_device);
+            break;
+        case MAPPED_DEVICE:
+            ctx->backend.close_mapped(ctx, (io_mapped_device *)*start_device);
+            break;
+        default:
+            break;
+        }
+        start_device++;
+    }
+    free(ctx->devices);
+    free(ctx);
+}
 
 io_device *io_add_mapped_device(io_context *ctx, char *path)
 {
     io_mapped_device *device = ctx->backend.open_mapped(ctx, path, 512);
+    device->device.type = MAPPED_DEVICE;
     if (io_append_device(ctx, (io_device *)device) <= 0)
     {
         free(device);
@@ -42,6 +66,7 @@ io_device *io_add_mapped_device(io_context *ctx, char *path)
 io_device *io_add_stream_device(io_context *ctx, char *path)
 {
     io_stream_device *device = ctx->backend.open_stream(ctx, path);
+    device->device.type = STREAM_DEVICE;
     if (io_append_device(ctx, (io_device *)device) <= 0)
     {
         free(device);

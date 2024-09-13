@@ -92,8 +92,6 @@ static uint32_t io_write_stream_local(io_stream_device *device, void *data, uint
         ioctl(device->fd, FINISH_XFER, &local_buffer->current_buffer_id);
     }
 
-    printf("%d\r", current_buffer->status);
-
     current_buffer->length = size;
     // zero copy support
     if (((void *)current_buffer) == data)
@@ -154,6 +152,25 @@ io_mapped_device *io_open_mapped_local(io_context *ctx, char *file_path, size_t 
     return device;
 }
 
+int io_close_mapped_local(io_context *ctx, io_mapped_device *device)
+{
+    int ret;
+    if (device == NULL)
+        return 0;
+
+    ret = munmap(device->ch.start, (void *)device->ch.end - (void *)device->ch.start);
+
+    if (ret)
+    {
+        printf("Error when unmapping memory %d\n", ret);
+    }
+
+    close(device->fd);
+    free(device);
+
+    return 0;
+}
+
 io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
 {
     io_stream_device *device;
@@ -172,6 +189,7 @@ io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
     device->ch.private = io_local_buffer_init(fd);
     device->ch.write_stream = io_write_stream_local;
     device->ch.alloc_buffer = io_stream_zc_buffer_local;
+
     if (device->ch.private == NULL)
     {
         free(device);
@@ -180,3 +198,22 @@ io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
     }
     return device;
 }
+
+int io_close_stream_local(io_context *ctx, io_stream_device *device)
+{
+    if (device == NULL)
+        return 0;
+    local_buffer_d *local_buffer = (local_buffer_d *) device->ch.private;
+
+
+    buffer_release((struct channel_buffer_context *)local_buffer->buffer_ctx);
+
+    free(local_buffer);
+
+    close(device->fd);
+
+    free(device);
+
+    return 0;
+}
+

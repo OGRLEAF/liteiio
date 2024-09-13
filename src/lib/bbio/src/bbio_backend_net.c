@@ -201,6 +201,17 @@ io_mapped_device *io_open_mapped_net(io_context *ctx, char *file_path, size_t si
     return device;
 }
 
+int io_close_mapped_net(io_context *ctx, io_mapped_device *device)
+{
+    if (device == NULL)
+        return 0;
+
+    close(device->fd);
+
+    free(device);
+    return 0;
+}
+
 io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
 {
     int sockfd, remotefd;
@@ -246,4 +257,14 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
     io_net_call_start(device, CALL_WRITE_STREAM);
 
     return device;
+}
+
+int io_close_stream_net(io_context *ctx, io_stream_device *device)
+{
+    if (device == NULL)
+        return 0;
+    close(device->fd);
+    free(device->ch.private);
+    free(device);
+    return 0;
 }

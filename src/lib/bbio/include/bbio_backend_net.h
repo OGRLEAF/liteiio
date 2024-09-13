@@ -47,5 +47,6 @@ typedef struct _bbio_net_context
 
 io_mapped_device *io_open_mapped_net(io_context *ctx, char *file_path, size_t size);
 io_stream_device *io_open_stream_net(io_context *ctx, char *file_path);
-
+int io_close_stream_net(io_context *ctx, io_stream_device *device);
+int io_close_mapped_net(io_context *ctx, io_mapped_device *device);
 #endif
