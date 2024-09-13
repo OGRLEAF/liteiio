@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     io_stream_device *dma_dev = (io_stream_device *)io_add_stream_device(ctx, "/dev/dma_proxy_tx");
 
     int test_times = 64, j = 0;
-    for (int j = 0; ; j++)
+    for (int j = 0; j < test_times ; j++)
     {
         struct channel_buffer *buffer_test = io_stream_get_buffer(dma_dev);
 
@@ -49,6 +49,7 @@ int main(int argc, char **argv)
 
         io_write_stream_device(dma_dev, buffer_test, test_size * sizeof(iq_buffer));
     }
+    io_close_context(ctx);
 
     return 0;
 }
