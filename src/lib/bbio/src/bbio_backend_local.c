@@ -69,6 +69,7 @@ uint16_t io_read_busrt_local(io_context *ctx, void *addr, void *data, uint32_t s
 
 static local_buffer_d *io_local_buffer_init(int fd)
 {
+    int i;
     struct channel_buffer_context *buffer_ctx = buffer_allocate(BUFFER_COUNT, fd);
     if (!buffer_ctx)
     {
@@ -78,52 +79,54 @@ static local_buffer_d *io_local_buffer_init(int fd)
     local_buffer_d *local_buffer = (local_buffer_d *)malloc(sizeof(local_buffer_d));
     local_buffer->buffer_count = BUFFER_COUNT;
     local_buffer->buffer_ctx = buffer_ctx;
+    local_buffer->current_buffer_id = 0;
+
+    for(i=0;i<local_buffer->buffer_count;i++)
+    {
+         buffer_ctx->channel_buffer[i].status = PROXY_NO_ERROR;
+    }
     return local_buffer;
 }
 
 static uint32_t io_write_stream_local(io_stream_device *device, void *data, uint32_t size)
 {
     local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
-    struct channel_buffer *current_buffer = local_buffer->buffer_ctx->channel_buffer + local_buffer->current_buffer_id;
-    // printf("Buffer %d status:%d -> ", local_buffer->current_buffer_id, current_buffer->status);
-    if (current_buffer->status == PROXY_QUEUED)
+    struct channel_buffer *current_buffer = (struct channel_buffer *)data; // local_buffer->buffer_ctx->channel_buffer + local_buffer->current_buffer_id;
+    int buffer_id = ((void*)current_buffer - (void*)local_buffer->buffer_ctx->channel_buffer) / sizeof(struct channel_buffer);
+    // fprintf(stderr, "Buffer %d len=%d status:%d -> ", buffer_id, size, current_buffer->status);
+
+    if (current_buffer->status == PROXY_QUEUED || current_buffer->status == PROXY_TIMEOUT)
     {
         // wait for the last buffer finished, it means we are faster than dma
-        ioctl(device->fd, FINISH_XFER, &local_buffer->current_buffer_id);
+        ioctl(device->fd, FINISH_XFER, &buffer_id);
     }
+    // fprintf(stderr, "%d \n", current_buffer->status);
+    // current_buffer->status = PROXY_NO_ERROR;
 
     current_buffer->length = size;
     // zero copy support
     if (((void *)current_buffer) == data)
     {
+        // printf("zero copy\n");
     }
     else
         memcpy(current_buffer->buffer, data, size);
 
     // start next transmition
-    ioctl(device->fd, START_XFER, &local_buffer->current_buffer_id);
-
+    ioctl(device->fd, START_XFER, &buffer_id);
     // rolling buffer
-    local_buffer->current_buffer_id = (local_buffer->current_buffer_id + 1) % local_buffer->buffer_count;
+    // local_buffer->current_buffer_id = (local_buffer->current_buffer_id + 1) % local_buffer->buffer_count;
 }
 
 struct channel_buffer *io_stream_zc_buffer_local(io_stream_device *device, uint32_t flag)
 {
     // get next buffer
     local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
-    struct channel_buffer *current_buffer = local_buffer->buffer_ctx->channel_buffer + local_buffer->current_buffer_id;
-    // printf("Buffer %d status:%d -> ", local_buffer->current_buffer_id, current_buffer->status);
-    // if (current_buffer->status == PROXY_QUEUED)
-    //     // wait for the last buffer finished, it means we are faster than dma
-    //     ioctl(device->fd, FINISH_XFER, &local_buffer->current_buffer_id);
-    // // may 3s timeout
-    // // check buffer status
-    // if(current_buffer->status == PROXY_TIMEOUT) {
-    //     // try clear error
-    // }
-    // printf("%d\n", current_buffer->status);
-
-    return current_buffer;
+    struct channel_buffer *next_buffer;
+    next_buffer = &local_buffer->buffer_ctx->channel_buffer[local_buffer->current_buffer_id];
+    // printf("stream buffer =%d\n", local_buffer->current_buffer_id);
+    local_buffer->current_buffer_id = (local_buffer->current_buffer_id + 1) % local_buffer->buffer_count;
+    return next_buffer;
 }
 
 io_mapped_device *io_open_mapped_local(io_context *ctx, char *file_path, size_t size)
@@ -199,12 +202,29 @@ io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
     return device;
 }
 
+void io_finish_stream_local(io_stream_device *device)
+{
+    local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
+    for (int i = 0; i < local_buffer->buffer_count; i++)
+    {
+        struct channel_buffer *ch = local_buffer->buffer_ctx->channel_buffer + i;
+        if (ch->status != PROXY_NO_ERROR)
+        {
+
+            printf("Waiting for buffer %d finishing %d...", i, ch->status);
+            ioctl(device->fd, FINISH_XFER, &i);
+            printf("%d\n", ch->status);
+        }
+    }
+}
+
 int io_close_stream_local(io_context *ctx, io_stream_device *device)
 {
     if (device == NULL)
         return 0;
-    local_buffer_d *local_buffer = (local_buffer_d *) device->ch.private;
 
+    local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
+    io_finish_stream_local(device);
 
     buffer_release((struct channel_buffer_context *)local_buffer->buffer_ctx);
 
@@ -216,4 +236,3 @@ int io_close_stream_local(io_context *ctx, io_stream_device *device)
 
     return 0;
 }
-
