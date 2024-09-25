@@ -25,6 +25,13 @@ handshake_msg stream_handshake_msg = {
     .type = 1,
 };
 
+struct net_device_state
+{
+    uint8_t handshaked;
+    uint32_t remain_recv_size;
+    struct channel_buffer *ch_buffer;
+};
+
 typedef struct _open_call_param
 {
     uint8_t file_path_len;
@@ -110,12 +117,22 @@ uint32_t io_read_net(io_mapped_device *device, uint32_t addr)
 static struct channel_buffer *io_stream_alloc_buffer_net(io_stream_device *device, uint32_t flag)
 {
     // printf("get buffer\n");
-    return (struct channel_buffer *)device->ch.private;
+    struct net_device_state *state = (struct net_device_state *)device->ch.private;
+    return (struct channel_buffer *)state->ch_buffer;
 }
 
 static uint32_t io_write_stream_net(io_stream_device *device, void *data, uint32_t size)
 {
     int flag_on = 1, flag_off = 0;
+
+    // first handshake
+    struct net_device_state *state = (struct net_device_state *)device->ch.private;
+    if (!state->handshaked)
+    {
+        io_net_call_start(device, CALL_WRITE_STREAM);
+        state->handshaked = 1;
+    }
+
     struct iovec iov[3];
     // io_net_call_startv(device, iov[0], CALL_WRITE_STREAM);
     // io_net_call_paramv(device, iov[1], sizeof(size), &size);
@@ -126,6 +143,60 @@ static uint32_t io_write_stream_net(io_stream_device *device, void *data, uint32
     io_net_call_param(device, size, data);
     // io_net_call_param(device, size, data);
     // io_net_call_return(device, sizeof(size), &size);
+    return size;
+}
+
+// Basic implementation of blocked stream read from net.
+static uint32_t io_read_stream_net(io_stream_device *device, void *data, uint32_t size)
+{
+    int sockfd = device->fd;
+    struct net_device_state *state = (struct net_device_state *)device->ch.private;
+
+    uint32_t n, recv_size = 0;
+    uint8_t start_cmd;
+
+    uint32_t buffer_ptr = 0;
+
+    if (!state->handshaked)
+    {
+        io_net_call_start(device, CALL_READ_STREAM);
+        state->handshaked = 1;
+        state->remain_recv_size = 0;
+    }
+
+    if (state->remain_recv_size == 0)
+    {
+        recv(sockfd, &start_cmd, sizeof(start_cmd), 0); // sync with header of stream
+        if (start_cmd == (CALL_READ_STREAM << 1))
+        {
+            n = recv(sockfd, &recv_size, sizeof(recv_size), 0);
+            if (recv_size > size)
+            {
+                state->remain_recv_size = recv_size;
+            }
+            else
+            {
+                state->remain_recv_size = size;
+            }
+        }
+        else
+        {
+            printf("Failed to sync with read stream\n");
+        }
+    }
+    
+    printf("Size=%d/%d to recieve\n", state->remain_recv_size, size);
+    state->remain_recv_size -= size; // assumming size will be fully consumed
+    while (size > 0)
+    {
+        n = recv(sockfd, (data + buffer_ptr), size, 0);
+        if (n <= 0)
+            break;
+        size -= n;
+        buffer_ptr += n;
+    }
+    state->remain_recv_size += size;
+    printf("%d/%d remain\n", state->remain_recv_size, size);
     return size;
 }
 
@@ -219,6 +290,9 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
     const int flag = 1;
     io_net_context *ctx_net = (io_net_context *)ctx;
     io_stream_device *device;
+
+    struct net_device_state *state;
+
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd < 0)
@@ -250,21 +324,32 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
     device->fd = sockfd;
 
     device->ch.write_stream = io_write_stream_net;
-    device->ch.private = (void *)malloc(sizeof(struct channel_buffer));
+    device->ch.read_stream = io_read_stream_net;
+
+    state = malloc(sizeof(struct net_device_state));
+    state->ch_buffer = malloc(sizeof(struct channel_buffer));
+    state->handshaked = 0;
+
+    device->ch.private = (void *)state;
+
     device->ch.alloc_buffer = io_stream_alloc_buffer_net;
 
     setsockopt(device->fd, IPPROTO_TCP, TCP_CORK, &flag, sizeof(flag));
-    io_net_call_start(device, CALL_WRITE_STREAM);
 
     return device;
 }
 
 int io_close_stream_net(io_context *ctx, io_stream_device *device)
 {
+    struct net_device_state *state;
     if (device == NULL)
         return 0;
     close(device->fd);
-    free(device->ch.private);
+
+    state = (struct net_device_state *)device->ch.private;
+    free(state->ch_buffer);
+    free(state);
+
     free(device);
     return 0;
 }
