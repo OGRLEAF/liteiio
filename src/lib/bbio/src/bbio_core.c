@@ -78,7 +78,9 @@ io_device *io_add_stream_device(io_context *ctx, char *path)
 
 void io_write_mapped_device(io_mapped_device *device, uint32_t addr, uint32_t value)
 {
-    return device->ch.write(device, addr, value);
+    if(device->device.type == MAPPED_DEVICE)
+        return device->ch.write(device, addr, value);
+    return;
 }
 
 uint32_t io_read_mapped_device(io_mapped_device *device, uint32_t addr)
@@ -95,4 +97,10 @@ struct channel_buffer *io_stream_get_buffer(io_stream_device *device)
 void io_write_stream_device(io_stream_device *device, void *data, uint32_t size)
 {
     device->ch.write_stream(device, data, size);
+}
+
+
+void io_read_stream_device(io_stream_device *device, void *data, uint32_t size)
+{
+    device->ch.read_stream(device, data, size);
 }

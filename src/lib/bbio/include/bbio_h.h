@@ -127,5 +127,6 @@ void io_write_mapped_device(io_mapped_device *device, uint32_t addr, uint32_t va
 
 struct channel_buffer *io_stream_get_buffer(io_stream_device *device);
 void io_write_stream_device(io_stream_device *device, void *data, uint32_t size);
+void io_read_stream_device(io_stream_device *device, void *data, uint32_t size);
 
 #endif
