@@ -6,5 +6,5 @@
 
 
 int io_append_device(io_context *ctx, io_device *device);
-
+int io_count_devices(io_context *ctx);
 #endif
