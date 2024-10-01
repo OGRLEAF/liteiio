@@ -1,20 +1,22 @@
 #include "bbio_private_h.h"
+#include <string.h>
 
 int io_count_devices(io_context *ctx)
 {
+    int i = 0;
     io_device **dev = ctx->devices;
-    while (*dev)
+    while (dev[i])
     {
-        dev++;
+        i++;
     }
-
-    return dev - ctx->devices ;
+    return i;
 }
 
 int io_append_device(io_context *ctx, io_device *device)
 {
     int current_devices = io_count_devices(ctx);
     io_device **new_devices = (io_device **)malloc(sizeof(io_device *) * (current_devices + 2));
+    memset(new_devices, 0, sizeof(io_device *) * (current_devices + 2));
     int i;
     printf("Current devices: %d\n", current_devices);
     if (current_devices < MAX_DEVICE)
@@ -28,7 +30,7 @@ int io_append_device(io_context *ctx, io_device *device)
         device->ctx = ctx;
         free(ctx->devices);
         ctx->devices = new_devices;
-        
+
         return i + 1;
     }
 

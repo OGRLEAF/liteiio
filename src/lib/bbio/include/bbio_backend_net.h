@@ -34,7 +34,8 @@ enum cmd_call_type
     CALL_WRITE_BURST,
     CALL_READ_BURST,
     CALL_WRITE_STREAM,
-    CALL_READ_STREAM
+    CALL_READ_STREAM,
+    CALL_SYNC_STREAM
 };
 
 typedef struct _bbio_net_context

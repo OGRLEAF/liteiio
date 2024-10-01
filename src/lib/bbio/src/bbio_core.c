@@ -30,9 +30,15 @@ io_context *io_create_context()
 
 void io_close_context(io_context *ctx)
 {
+    int current_devices = io_count_devices(ctx);
+    printf("Current devices: %d\n", current_devices);
     io_device **start_device = ctx->devices;
+    io_device *this_device;
     while ((*start_device) != NULL)
     {
+        this_device = *start_device;
+        printf("Close device %p", this_device);
+        printf(" %s \n", this_device->path);
         switch ((*start_device)->type)
         {
         case STREAM_DEVICE:
@@ -54,6 +60,7 @@ io_device *io_add_mapped_device(io_context *ctx, char *path)
 {
     io_mapped_device *device = ctx->backend.open_mapped(ctx, path, 512);
     device->device.type = MAPPED_DEVICE;
+    device->device.path = path;
     if (io_append_device(ctx, (io_device *)device) <= 0)
     {
         free(device);
@@ -67,6 +74,7 @@ io_device *io_add_stream_device(io_context *ctx, char *path)
 {
     io_stream_device *device = ctx->backend.open_stream(ctx, path);
     device->device.type = STREAM_DEVICE;
+    device->device.path = path;
     if (io_append_device(ctx, (io_device *)device) <= 0)
     {
         free(device);
@@ -78,7 +86,7 @@ io_device *io_add_stream_device(io_context *ctx, char *path)
 
 void io_write_mapped_device(io_mapped_device *device, uint32_t addr, uint32_t value)
 {
-    if(device->device.type == MAPPED_DEVICE)
+    if (device->device.type == MAPPED_DEVICE)
         return device->ch.write(device, addr, value);
     return;
 }
@@ -99,8 +107,14 @@ void io_write_stream_device(io_stream_device *device, void *data, uint32_t size)
     device->ch.write_stream(device, data, size);
 }
 
-
 void io_read_stream_device(io_stream_device *device, void *data, uint32_t size)
 {
     device->ch.read_stream(device, data, size);
+}
+
+void io_sync_stream_device(io_stream_device *device)
+{
+    if(device->ch.sync_stream) {
+        device->ch.sync_stream(device);
+    }
 }

@@ -25,6 +25,11 @@ handshake_msg stream_handshake_msg = {
     .type = 1,
 };
 
+handshake_msg stream_sync_msg = {
+    .head = HANDSHAKE_HEADER,
+    .type = 2,
+};
+
 struct net_device_state
 {
     uint8_t handshaked;
@@ -153,10 +158,9 @@ static uint32_t io_read_stream_net(io_stream_device *device, void *data, uint32_
     struct net_device_state *state = (struct net_device_state *)device->ch.private;
 
     uint32_t n, recv_size = 0;
-    uint8_t start_cmd;
+    uint8_t start_cmd = -1;
 
     uint32_t buffer_ptr = 0;
-
     if (!state->handshaked)
     {
         io_net_call_start(device, CALL_READ_STREAM);
@@ -166,7 +170,7 @@ static uint32_t io_read_stream_net(io_stream_device *device, void *data, uint32_
 
     if (state->remain_recv_size == 0)
     {
-        recv(sockfd, &start_cmd, sizeof(start_cmd), 0); // sync with header of stream
+        n = recv(sockfd, &start_cmd, sizeof(start_cmd), 0); // sync with header of stream
         if (start_cmd == (CALL_READ_STREAM << 1))
         {
             n = recv(sockfd, &recv_size, sizeof(recv_size), 0);
@@ -181,23 +185,35 @@ static uint32_t io_read_stream_net(io_stream_device *device, void *data, uint32_
         }
         else
         {
-            printf("Failed to sync with read stream\n");
+            printf("Failed to sync with read stream %d %d \n", start_cmd, n);
         }
     }
-    
+    if (size > state->remain_recv_size)
+    {
+        size = state->remain_recv_size;
+    }
+
     printf("Size=%d/%d to recieve\n", state->remain_recv_size, size);
-    state->remain_recv_size -= size; // assumming size will be fully consumed
+    // state->remain_recv_size -= size; // assumming size will be fully consumed
     while (size > 0)
     {
         n = recv(sockfd, (data + buffer_ptr), size, 0);
         if (n <= 0)
             break;
         size -= n;
+        state->remain_recv_size -= n;
         buffer_ptr += n;
     }
-    state->remain_recv_size += size;
-    printf("%d/%d remain\n", state->remain_recv_size, size);
+    // printf("%d/%d remain\n", state->remain_recv_size, size);
     return size;
+}
+
+static void io_sync_stream_deivce_net(io_stream_device *device)
+{
+    uint8_t ack;
+    struct net_device_state *state = (struct net_device_state *)device->ch.private;
+    if (state->remain_recv_size)
+        state->handshaked = 0;
 }
 
 static int io_handshake(int sockfd, enum cmd_channel_type type)
@@ -234,6 +250,7 @@ static IO_FD io_open_remote_device(int sockfd, char *dev_path, size_t size)
 
     return fd;
 }
+
 io_mapped_device *io_open_mapped_net(io_context *ctx, char *file_path, size_t size)
 {
     int sockfd, remotefd;
@@ -264,6 +281,7 @@ io_mapped_device *io_open_mapped_net(io_context *ctx, char *file_path, size_t si
     remotefd = io_open_remote_device(sockfd, file_path, size);
 
     device = (io_mapped_device *)malloc(sizeof(io_mapped_device));
+    device->device.path = file_path;
     device->fd = sockfd;
 
     device->ch.write = io_write_net;
@@ -307,7 +325,7 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
         return NULL;
     }
     setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int));
-    setsockopt(sockfd, SOL_SOCKET, SO_ZEROCOPY, &flag, sizeof(flag));
+    // setsockopt(sockfd, SOL_SOCKET, SO_ZEROCOPY, &flag, sizeof(flag));
 
     // handshake
     if (io_handshake(sockfd, STREAM_CHANNEL))
@@ -322,9 +340,11 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
 
     device = (io_stream_device *)malloc(sizeof(io_stream_device));
     device->fd = sockfd;
+    device->device.path = file_path;
 
     device->ch.write_stream = io_write_stream_net;
     device->ch.read_stream = io_read_stream_net;
+    device->ch.sync_stream = io_sync_stream_deivce_net;
 
     state = malloc(sizeof(struct net_device_state));
     state->ch_buffer = malloc(sizeof(struct channel_buffer));
@@ -332,9 +352,16 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
 
     device->ch.private = (void *)state;
 
+    if (!state->handshaked)
+    {
+        io_net_call_start(device, CALL_READ_STREAM);
+        state->handshaked = 1;
+        state->remain_recv_size = 0;
+    }
+
     device->ch.alloc_buffer = io_stream_alloc_buffer_net;
 
-    setsockopt(device->fd, IPPROTO_TCP, TCP_CORK, &flag, sizeof(flag));
+    // setsockopt(device->fd, IPPROTO_TCP, TCP_CORK, &flag, sizeof(flag));
 
     return device;
 }
@@ -342,6 +369,7 @@ io_stream_device *io_open_stream_net(io_context *ctx, char *file_path)
 int io_close_stream_net(io_context *ctx, io_stream_device *device)
 {
     struct net_device_state *state;
+    printf("Close stream net socket\n");
     if (device == NULL)
         return 0;
     close(device->fd);

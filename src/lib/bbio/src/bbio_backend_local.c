@@ -174,6 +174,22 @@ int io_close_mapped_local(io_context *ctx, io_mapped_device *device)
     return 0;
 }
 
+static void io_finish_stream_local(io_stream_device *device)
+{
+    local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
+    for (int i = 0; i < local_buffer->buffer_count; i++)
+    {
+        struct channel_buffer *ch = local_buffer->buffer_ctx->channel_buffer + i;
+        if (ch->status != PROXY_NO_ERROR)
+        {
+
+            // printf("Waiting for buffer %d finishing %d...", i, ch->status);
+            ioctl(device->fd, FINISH_XFER, &i);
+            // printf("%d\n", ch->status);
+        }
+    }
+}
+
 io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
 {
     io_stream_device *device;
@@ -193,7 +209,7 @@ io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
     device->ch.write_stream = io_write_stream_local;
     device->ch.read_stream = io_write_stream_local;
     device->ch.alloc_buffer = io_stream_zc_buffer_local;
-
+    device->ch.sync_stream = io_finish_stream_local;
     if (device->ch.private == NULL)
     {
         free(device);
@@ -201,22 +217,6 @@ io_stream_device *io_open_stream_local(io_context *ctx, char *file_path)
         return NULL;
     }
     return device;
-}
-
-void io_finish_stream_local(io_stream_device *device)
-{
-    local_buffer_d *local_buffer = (local_buffer_d *)device->ch.private;
-    for (int i = 0; i < local_buffer->buffer_count; i++)
-    {
-        struct channel_buffer *ch = local_buffer->buffer_ctx->channel_buffer + i;
-        if (ch->status != PROXY_NO_ERROR)
-        {
-
-            // printf("Waiting for buffer %d finishing %d...", i, ch->status);
-            ioctl(device->fd, FINISH_XFER, &i);
-            // printf("%d\n", ch->status);
-        }
-    }
 }
 
 int io_close_stream_local(io_context *ctx, io_stream_device *device)

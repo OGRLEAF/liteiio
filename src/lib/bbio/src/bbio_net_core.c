@@ -33,6 +33,7 @@ io_context *io_create_net_context(char *host, uint16_t port)
     io_context *ctx = (io_context *)ctx_net;
 
     ctx->devices = (io_device **)malloc(1 * sizeof(io_device *));
+    ctx->devices[0] = NULL;
     ctx->backend.open_mapped = io_open_mapped_net;
     ctx->backend.open_stream = io_open_stream_net;
     ctx->backend.close_mapped = io_close_mapped_net;
